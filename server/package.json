@@ -1,0 +1,22 @@
+{
+  "name": "grammar-trainer-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && cp src/schema.sql dist/server/src/",
+    "start": "node dist/server/src/index.js",
+    "dev": "LOG_PRETTY=1 tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@sentry/node": "^11.9.0",
+    "pg": "^8.13.1",
+    "pino": "^10.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "pino-pretty": "^13.2.0",
+    "tsx": "^4.19.2"
+  }
+}

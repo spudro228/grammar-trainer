@@ -1,0 +1,55 @@
+# Продуктивный стек: Postgres + API + статика за nginx. `docker compose up -d --build`, затем http://localhost:8080
+# Логи контейнеров: json-file с ротацией; их читает Alloy (compose.logs.yml) и `docker compose logs`.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: trainer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trainer}
+      POSTGRES_DB: trainer
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trainer -d trainer"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    logging: *logging
+
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    environment:
+      DATABASE_URL: postgres://trainer:${POSTGRES_PASSWORD:-trainer}@db:5432/trainer
+      PORT: "3000"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?Задайте ADMIN_TOKEN в .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_BUILD: ${APP_BUILD:-}
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  pgdata:

@@ -1,0 +1,95 @@
+# Сбор логов и ошибок. Поверх основного стека:
+#   docker compose -f compose.yml -f compose.logs.yml up -d --build
+# Grafana (логи всех контейнеров, поиск по requestId/userId): http://localhost:3001  (admin / GRAFANA_PASSWORD)
+# GlitchTip (ошибки со стектрейсами, Sentry-совместимый):      http://localhost:8001
+#   После первого входа создайте организацию и проект, возьмите DSN и запишите в .env:
+#   SENTRY_DSN (API) и VITE_SENTRY_DSN (клиент), затем пересоберите: make up-logs
+services:
+  loki:
+    image: grafana/loki:3.7.9
+    command: -config.file=/etc/loki/config.yml
+    volumes:
+      - ./docker/loki/config.yml:/etc/loki/config.yml:ro
+      - loki:/loki
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.21.2
+    command: run --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    volumes:
+      - ./docker/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy:/var/lib/alloy/data
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.2.4
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  # ---- GlitchTip: ошибки и стектрейсы (клиент и API)
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  glitchtip:
+    image: glitchtip/glitchtip:6.2.6
+    environment: &glitchtip
+      DATABASE_URL: postgres://trainer:${POSTGRES_PASSWORD:-trainer}@db:5432/glitchtip
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${GLITCHTIP_SECRET:?Задайте GLITCHTIP_SECRET в .env}
+      GLITCHTIP_DOMAIN: http://localhost:${GLITCHTIP_PORT:-8001}
+      ENABLE_USER_REGISTRATION: "true"
+      ENABLE_ORGANIZATION_CREATION: "true"
+      EMAIL_URL: consolemail://
+      DEFAULT_FROM_EMAIL: glitchtip@localhost
+    ports:
+      - "${GLITCHTIP_PORT:-8001}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  glitchtip-worker:
+    image: glitchtip/glitchtip:6.2.6
+    command: ./bin/run-celery-with-beat.sh
+    environment: *glitchtip
+    depends_on:
+      - glitchtip
+    restart: unless-stopped
+
+  # База для GlitchTip в том же Postgres: создаётся скриптом при первой инициализации тома.
+  db:
+    volumes:
+      - ./docker/db-init.sql:/docker-entrypoint-initdb.d/10-glitchtip.sql:ro
+
+  # Приложение получает DSN и метку сборки.
+  api:
+    environment:
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      APP_BUILD: ${APP_BUILD:-}
+  web:
+    build:
+      args:
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+        APP_BUILD: ${APP_BUILD:-}
+
+volumes:
+  loki:
+  alloy:
+  grafana:

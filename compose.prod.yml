@@ -1,0 +1,31 @@
+# Сервер: Caddy снаружи (80/443, сертификат Let's Encrypt сам), web только внутри сети.
+#   docker compose -f compose.yml -f compose.prod.yml up -d --build
+# SITE_ADDRESS в .env: домен или <ip-с-дефисами>.sslip.io (например 212-192-11-36.sslip.io).
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Задайте SITE_ADDRESS в .env}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  web:
+    ports: !reset []
+
+volumes:
+  caddy_data:
+  caddy_config:

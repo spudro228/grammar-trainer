@@ -1,0 +1,47 @@
+// Alloy: читает логи всех контейнеров проекта через Docker API и шлёт в Loki.
+// JSON-строки API разбираются: level, requestId, userId, status, ms становятся полями для поиска.
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "project"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  forward_to = [loki.process.json.receiver]
+}
+
+loki.process "json" {
+  stage.json {
+    expressions = { level = "level", msg = "msg", requestId = "requestId", userId = "userId", role = "role", status = "status", method = "method", path = "path", ms = "ms" }
+  }
+  stage.labels {
+    values = { level = "" }
+  }
+  stage.structured_metadata {
+    values = { requestId = "", userId = "", role = "", status = "", method = "", path = "", ms = "" }
+  }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

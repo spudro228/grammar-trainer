@@ -1,0 +1,28 @@
+# Проверки в контейнере: типы, линтер, тесты (в т.ч. API на настоящем Postgres).
+#   docker compose -f compose.test.yml run --rm --build test
+services:
+  db-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: trainer
+      POSTGRES_PASSWORD: trainer
+      POSTGRES_DB: trainer_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trainer -d trainer_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  test:
+    build:
+      context: .
+      dockerfile: docker/test.Dockerfile
+    environment:
+      TEST_DATABASE_URL: postgres://trainer:trainer@db-test:5432/trainer_test
+      CI: "1"
+    depends_on:
+      db-test:
+        condition: service_healthy
+    command: npm run check

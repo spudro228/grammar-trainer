@@ -1,0 +1,27 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: trainer, POSTGRES_PASSWORD: trainer, POSTGRES_DB: trainer_test }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U trainer -d trainer_test" --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run check
+        env:
+          TEST_DATABASE_URL: postgres://trainer:trainer@localhost:5432/trainer_test
+      - run: npm run build && npm run build:api
+  images:
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose build
