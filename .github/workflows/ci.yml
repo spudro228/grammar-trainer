@@ -25,3 +25,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker compose build
+        env:
+          # compose.yml требует ADMIN_TOKEN; для сборки образов значение не важно
+          ADMIN_TOKEN: ci-build-token

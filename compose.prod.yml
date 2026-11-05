@@ -1,6 +1,6 @@
 # Сервер: Caddy снаружи (80/443, сертификат Let's Encrypt сам), web только внутри сети.
 #   docker compose -f compose.yml -f compose.prod.yml up -d --build
-# SITE_ADDRESS в .env: домен или <ip-с-дефисами>.sslip.io (например 212-192-11-36.sslip.io).
+# SITE_ADDRESS в .env: домен или <ip-с-дефисами>.sslip.io (например 203-0-113-10.sslip.io).
 services:
   caddy:
     image: caddy:2-alpine
